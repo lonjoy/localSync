@@ -87,11 +87,12 @@
     );
   };
 
-  var LocalStoreIndex = function (indexedField, compareFunction) {
+  var LocalStoreIndex = function (indexedField, transform, compareFunction) {
     /// <summary>
     /// The LocalStoreIndex class is an internal helper class for the LocalStore class.
     /// </summary>
     /// <param name="indexedField" type="string">The name of the field that is being indexed</param>
+    /// <param name="transform?" type="Function">
     /// <param name="compareFunction?" type="Function">
     /// The compare function is of the form: int compare(object o1, object o2);
     /// the return value is:
@@ -99,7 +100,78 @@
     ///  else otherwise
     /// </param>
     this.indexedField = indexedField;
-    this.index = new AVLTree(compareFunction);
+    this.transform = transform || function(value) { return value; };
+
+    compareFunction = compareFunction || _compare;
+
+    var cmpLt = function(a, b) {
+      if (a.key < b.key) {
+        return true;
+      }
+      else if (a.key === b.key) {
+        return a.id < b.id;
+      }
+
+      return false;
+    }
+    
+    this.index = new AVLTree(cmpLt);
+
+    this.insert = function(key, value) {
+      if (!key || !value) {
+        throw "insert expects key and value";
+      }
+
+      key = this.transform(key);
+      this.index.insert({ key: key, id: value});
+    };
+
+    this.remove = function(key, predicate) {
+      if (!key) {
+        throw "remove expects key";
+      }
+
+      key = this.transform(key);
+      this.index.remove(key, predicate);
+    };
+
+    this.find = function(key) {
+      key = this.transform(key);
+      var node = this.index.find(key);
+      return node && node.value.id;
+    };
+
+    this.getRange = function(indexKeyStart, indexKeyEnd) {
+      var keys = [];
+
+      indexKeyStart = this.transform(indexKeyStart);
+      indexKeyEnd = this.transform(indexKeyEnd);
+
+      // get the closest node which is lower
+      var node = this.index.lower_bound(indexKeyStart);
+      // if this node is actually lower then our start key get its successor
+      if (node && this.index.cmp_lt(node.value, indexKeyStart)) {
+        node = this.index.successor(node);
+      }
+
+      while(node && (this.index.cmp_lt(node.value, indexKeyEnd) || this.index.cmp_eq(node.value, indexKeyEnd))) {
+        keys.push(node.value.id);
+        node = this.index.successor(node);
+      }
+
+      return keys;
+    }
+
+    this.forEach = function(action) {
+      action = action || function() {};
+
+      this.index.forEach(function(value) {
+        if (value) {
+          action(value);
+        }
+      });
+    };
+
     this.clear = function () {
       /// <summary>
       /// Clears the index
@@ -211,7 +283,7 @@
       _.each(this.indexCollection, function (ind) {
         // add the item to the index only if it has the indexed field
         if (item.hasOwnProperty(ind.indexedField)) {
-            ind.index.insert({ key: item[ind.indexedField], id: key});
+            ind.insert(item[ind.indexedField], key);
         }
       });
     },
@@ -240,7 +312,7 @@
 
       // remove from the indices
       _.each(this.indexCollection, function (ind) {
-        ind.index.remove(item[ind.indexedField], predicate);
+        ind.remove(item[ind.indexedField], predicate);
       });
     },
     remove: function (item) {
@@ -313,21 +385,8 @@
       ///  else otherwise
       /// </param>
 
-      compareFunction = compareFunction || _compare;
-
-      var cmpLt = function(a, b) {
-        if (a.key < b.key) {
-          return true;
-        }
-        else if (a.key === b.key) {
-          return a.id < b.id;
-        }
-
-        return false;
-      }
-
       // add the index to indices collection
-      var ind = new LocalStoreIndex(indexedField, cmpLt),
+      var ind = new LocalStoreIndex(indexedField, compareFunction),
           prefixLen;
 
       this.indexCollection[indexName] = ind;
@@ -337,7 +396,7 @@
       this.forEach(function (key, item) {
         // add the item to the index only if it has the indexedField
         if (item.hasOwnProperty(indexedField)) {
-          ind.index.insert({ key: item[indexedField],id: key});
+          ind.insert(item[indexedField], key);
         }
       });
     },
@@ -357,8 +416,7 @@
       /// <returns type="Object">the item corresponding to the searched value, empty array if none</returns>
       if (this.indexCollection.hasOwnProperty(indexName)) {
         var ind = this.indexCollection[indexName];
-        var node = ind.index.find(indexKey);
-        var storageKey = node && node.value.id;
+        var storageKey = ind.find(indexKey);
 
         if (!storageKey) {
           return null;
@@ -384,12 +442,7 @@
       if (this.indexCollection.hasOwnProperty(indexName)) {
         var ind = this.indexCollection[indexName];
 
-        var keys = [];
-        var node = ind.index.find(indexKeyStart);
-        while(node && (ind.index.cmp_lt(node.value, indexKeyEnd) || ind.index.cmp_eq(node.value, indexKeyEnd))) {
-          keys.push(node.value.id);
-          node = ind.index.successor(node);
-        }
+        var keys = ind.getRange(indexKeyStart, indexKeyEnd);
 
         var items = [];
         var self = this;
@@ -507,9 +560,9 @@
       var ind = this.indexCollection[indexName];
       var storage = this.storage;
 
-      if (ind && ind.index) {
-        ind.index.forEach(function(value) {
-          var item = storage.getItem(value.id);
+      if (ind) {
+        ind.forEach(function(value) {
+          var item = storage.getItem(value);
           if (item) {
             action(JSON.parse(item));
           }
