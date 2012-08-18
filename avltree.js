@@ -5,6 +5,9 @@
 // An AVL Tree Node
 (function() {
   "use strict";
+  
+  // Establish the root object, `window` in the browser, or `global` on the server.
+  var root = this;
 
   function AVLTreeNode(value, parent, height, weight, left, right, metadata) {
     this.value = value;
