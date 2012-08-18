@@ -5,7 +5,7 @@ var should = require('should');
 var _ = require('../underscore-min');
 var async = require('../async.min');
 var LocalStore = require('../LocalStore').LocalStore;
-var localStorage = require('./localStorage');
+var localStorage = require('../localStorage');
 
 function arrayShuffle(theArray) {
   var len = theArray.length;

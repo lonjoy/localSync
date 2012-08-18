@@ -541,20 +541,38 @@
     }
   };
 
-  AVLTree.prototype.__defineGetter__('height', function() {
+  AVLTree.prototype.getHeight = function() {
     return this.root ? this.root.height : 0;
-  });
+  };
 
-  AVLTree.prototype.__defineGetter__('length', function() {
+  AVLTree.prototype.getLength = function() {
     return this.root ? this.root.weight : 0;
-  });
+  };
 
-  AVLTree.prototype.__defineGetter__('min', function() {
+  AVLTree.prototype.getMin = function() {
     return this.length ? this.find_by_rank(1) : null;
-  });
+  };
 
-  AVLTree.prototype.__defineGetter__('max', function() {
+  AVLTree.prototype.getMax = function() {
     return this.length ? this.find_by_rank(this.length) : null;
-  });
+  };
+
+  if (Object.prototype.__defineGetter__) {
+    AVLTree.prototype.__defineGetter__('height', function() {
+      return this.getHeight();
+    });
+
+    AVLTree.prototype.__defineGetter__('length', function() {
+      return this.getLength();
+    });
+
+    AVLTree.prototype.__defineGetter__('min', function() {
+      return this.getMin();
+    });
+
+    AVLTree.prototype.__defineGetter__('max', function() {
+      return this.getMax();
+    });
+  }
 
 }).call(this);
