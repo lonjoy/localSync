@@ -371,7 +371,7 @@
       /// <returns type="Boolean">true if it exists, false otherwise</returns>
       return !!this.storage.getItem(this.generateKey(key));
     },
-    addIndex: function (indexName, indexedField, compareFunction) {
+    addIndex: function (indexName, indexedField, transform, compareFunction) {
       /// <summary>
       /// Adds a new index to the LocalStore
       /// </summary>
@@ -386,7 +386,7 @@
       /// </param>
 
       // add the index to indices collection
-      var ind = new LocalStoreIndex(indexedField, compareFunction),
+      var ind = new LocalStoreIndex(indexedField, transform, compareFunction),
           prefixLen;
 
       this.indexCollection[indexName] = ind;
