@@ -25,6 +25,7 @@
   var root = this;
   // holds the AVLTree c'tor
   var AVLTree = root.AVLTree;
+  var SkipList = root.SkipList;
   var _ = root._;
   var async = root.async;
 
@@ -131,8 +132,14 @@
         throw "remove expects key";
       }
 
+      var avlPredicate = function (node) {
+        if (!predicate) return true;
+
+        return predicate(node.value.id);
+      };
+
       key = this.transform(key);
-      this.index.remove(key, predicate);
+      this.index.remove(key, avlPredicate);
     };
 
     this.find = function(key) {
@@ -166,6 +173,73 @@
       action = action || function() {};
 
       this.index.forEach(function(value) {
+        if (value && value.id) {
+          action(value.id);
+        }
+      });
+    };
+
+    this.clear = function () {
+      /// <summary>
+      /// Clears the index
+      /// </summary>
+      this.index.clear();
+    };
+  };
+
+  var SkipListLocalStoreIndex = function (indexedField, transform, compareFunction) {
+    /// <summary>
+    /// The LocalStoreIndex class is an internal helper class for the LocalStore class.
+    /// </summary>
+    /// <param name="indexedField" type="string">The name of the field that is being indexed</param>
+    /// <param name="transform?" type="Function">
+    /// <param name="compareFunction?" type="Function">
+    /// The compare function is of the form: int compare(object o1, object o2);
+    /// the return value is:
+    ///  true if o1 < o2
+    ///  else otherwise
+    /// </param>
+    this.indexedField = indexedField;
+    this.transform = transform || function(value) { return value; };
+
+    this.index = new SkipList(compareFunction);
+
+    this.insert = function(key, value) {
+      if (!key || !value) {
+        throw "insert expects key and value";
+      }
+
+      key = this.transform(key);
+      this.index.add(key, value);
+    };
+
+    this.remove = function(key, predicate) {
+      if (!key) {
+        throw "remove expects key";
+      }
+
+      key = this.transform(key);
+      this.index.remove(key, predicate);
+    };
+
+    this.find = function(key) {
+      key = this.transform(key);
+      return this.index.getFirst(key);
+    };
+
+    this.getRange = function(indexKeyStart, indexKeyEnd) {
+      var keys = [];
+
+      indexKeyStart = this.transform(indexKeyStart);
+      indexKeyEnd = this.transform(indexKeyEnd);
+
+      return this.index.getRange(indexKeyStart, indexKeyEnd);
+    }
+
+    this.forEach = function(action) {
+      action = action || function() {};
+
+      this.index.forEach(function(value) {
         if (value) {
           action(value);
         }
@@ -176,7 +250,7 @@
       /// <summary>
       /// Clears the index
       /// </summary>
-      this.index.clear();
+      this.index = new SkipList(compareFunction);
     };
   };
 
@@ -204,6 +278,7 @@
   if (typeof exports !== 'undefined') {
     if (typeof module !== 'undefined' && module.exports) {
       AVLTree = require('./avltree').AVLTree;
+      SkipList = require('./SkipList').SkipList;
       _ = require('./underscore-min');
       async = require('./async.min');
       exports = module.exports
@@ -306,8 +381,8 @@
       this.storage.removeItem(storageKey);
 
       // a predicate to uniquely identify an object inside an index
-      predicate = function (node) {
-        return node.value.id === storageKey;
+      predicate = function (value) {
+        return value === storageKey;
       };
 
       // remove from the indices
@@ -329,15 +404,12 @@
 
       // clear storage
       // delete all keys starting with our storage prefix            
-      var prefixLen = this.storageKeyPrefix.length,
-          keys = [],
+      var keys = [],
           self = this,
           i;
 
       self.storageEach(function (key) {
-        if (key.substr(0, prefixLen) === self.storageKeyPrefix) {
-          keys.push(key);
-        }
+        keys.push(key);
       });
       for (i = 0; i < keys.length; i++) {
         // delete from the storage
@@ -378,6 +450,7 @@
       /// <remarks>This will cause the new indexed to be created, i.e. the store will be iterated</remarks>
       /// <param name="indexName" type="string">The name of the index</param>
       /// <param name="indexedField" type="string">The name of the field that is being indexed</param>
+      /// <param name="transform?" type="Function">
       /// <param name="compareFunction?" type="Function">
       /// The compare function is of the form: int compare(object o1, object o2);
       /// the return value is:
@@ -386,7 +459,7 @@
       /// </param>
 
       // add the index to indices collection
-      var ind = new LocalStoreIndex(indexedField, transform, compareFunction),
+      var ind = new SkipListLocalStoreIndex(indexedField, transform, compareFunction),
           prefixLen;
 
       this.indexCollection[indexName] = ind;
@@ -458,16 +531,29 @@
 
       return [];
     },
-    getAllByIndex: function (indexName, indexKey) {
+    getAllByIndex: function (indexName) {
       /// <summary>
-      /// Get all items from the index which corresponds to the given index value
+      /// Get all items ordered by the given index
       /// </summary>
       /// <param name="indexName" type="string">The name of the index</param>
-      /// <param name="indexKey" type="Object">The value of the index to search for</param>
       /// <returns type="Array" elementType="Object">
-      /// An array of all items corresponding to the searched value, empty array if none
+      /// An array of all items ordered by the index value
       /// </returns>
-      return getRangeByIndex(indexName, indexKey, indexKey);
+      var items = []
+      this.forEachByIndex(indexName, function(key, item) { items.push(item); });
+      return items;
+    },
+    map: function (mapFunction) {
+      mapFunction = mapFunction || function(item) { return item; };
+      var items = [];
+      this.forEach(function(key, item) { items.push(mapFunction(item)); });
+      return items;
+    },
+    mapByIndex: function (indexName, mapFunction) {
+      mapFunction = mapFunction || function(item) { return item; };
+      var items = [];
+      this.forEachByIndex(indexName, function(key, item) { items.push(mapFunction(item)); });
+      return items;
     },
     storageEach : function(callback) {
       var i;
@@ -475,14 +561,19 @@
       var l = storage.length;
       var key;
       var item;
+      var prefixLen = this.storageKeyPrefix.length;
 
       callback = callback || function () {}
       for(i = 0; i<l; i++) {
         key = storage.key(i);
-        item = storage.getItem(key);
-        if (item) {
-          callback(key, JSON.parse(item));          
-        }
+
+        // take only items which belong to this store
+        if (key.substr(0, prefixLen) === this.storageKeyPrefix) {
+          item = storage.getItem(key);
+          if (item) {
+            callback(key, JSON.parse(item));          
+          }
+        } 
       }
     },
     removeFirstByIndex: function (indexName, indexKey) {
@@ -514,22 +605,6 @@
         });
       }
     },
-    removeAllByIndex: function (indexName, indexKey) {
-      /// <summary>
-      /// Removes all items from the index which corresponds to the given index value
-      /// </summary>
-      /// <param name="indexName" type="string">The name of the index</param>
-      /// <param name="indexKey" type="Object">The value of the index to search for</param>
-
-      var items = this.getAllByIndex(indexName, indexKey),
-          self = this;
-
-      if (items && items.length > 0) {
-        _.each(items, function (item) {
-          self.remove(item);
-        });
-      }
-    },
     forEach: function (action) {
       /// <summary>
       /// Perform an action on each of the items in the store
@@ -537,15 +612,8 @@
       /// <param name="action" type="Function">
       /// The action to perform. void action(string key, object item);
       /// </param>
-
-      var self = this,
-          prefixLen = this.storageKeyPrefix.length;
-
-      self.storageEach(function (key, item) {
-        // take only items which belong to this store
-        if (key.substr(0, prefixLen) === self.storageKeyPrefix) {
-          action(key, item);
-        }
+      this.storageEach(function (key, item) {
+        action(key, item);
       });
     },
     forEachByIndex: function (indexName, action) {
@@ -563,8 +631,8 @@
       if (ind) {
         ind.forEach(function(value) {
           var item = storage.getItem(value);
-          if (item) {
-            action(JSON.parse(item));
+          if (item) {            
+            action(value, JSON.parse(item));
           }
         });
       }

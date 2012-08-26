@@ -45,7 +45,7 @@ describe('create a time indexed store', function(){
 
       items.forEach(function(item) { timeStore.addOrUpdate(item); });
       var i=1;
-      timeStore.forEachByIndex('time', function(value) {
+      timeStore.forEachByIndex('time', function(key, value) {
         value.id.should.equal(i.toString());
         i++;
       });
@@ -67,7 +67,7 @@ describe('create a time indexed store', function(){
       });
       
       timeStore.indexCollection.should.have.property('time');
-      timeStore.forEachByIndex('time', function(value) {
+      timeStore.forEachByIndex('time', function(key, value) {
         value.id.should.equal(items[0].id);
         items.shift();
       });
@@ -88,7 +88,7 @@ describe('create a time indexed store', function(){
       timeStore.forEach(function() { count++ ;});
       count.should.equal(100);
       var i=1;
-      timeStore.forEachByIndex('time', function(value) {
+      timeStore.forEachByIndex('time', function(key, value) {
         value.id.should.equal(i.toString());
         i++;
       });
@@ -113,7 +113,7 @@ describe('create a time indexed store', function(){
             if (a.timestamp === b.timestamp) return a.id - b.id;
             return 1;
           });
-          timeStore.forEachByIndex('time', function(value) {
+          timeStore.forEachByIndex('time', function(key, value) {
             if (items.length > 0) {
               value.id.should.equal(items[0].id);
               items.shift();
