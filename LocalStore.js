@@ -74,7 +74,7 @@
           async.forEach(
             e,
             function(index, eachCallback) {
-              create(b[index], eachCallback);
+              create(index, b[index], eachCallback);
             },
             function(error) {
               paraCallback();
